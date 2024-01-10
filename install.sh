@@ -102,18 +102,18 @@ source "$config"
 
 source "$PWD/src/$service/constants-service.conf"
 
-# CHeck is the newest template available, else download it.
-DEB_LOC=$(pveam list $LXC_TEMPLATE_STORAGE | grep $LXC_TEMPLATE_VERSION | tail -1 | cut -d'_' -f2)
-DEB_REP=$(pveam available --section system | grep $LXC_TEMPLATE_VERSION | tail -1 | cut -d'_' -f2)
-TMPL_NAME=$(pveam available --section system | grep $LXC_TEMPLATE_VERSION | tail -1 | cut -d' ' -f11)
-
-if [[ $DEB_LOC == $DEB_REP ]];
-then
-  echo "Newest Version of $LXC_TEMPLATE_VERSION $DEB_REP exists.";
-else
-  echo "Will now download newest $LXC_TEMPLATE_VERSION $DEP_REP.";
-  pveam download $LXC_TEMPLATE_STORAGE $TMPL_NAME
+if [ $LXC_MEM -lt $LXC_MEM_MIN ]; then
+  LXC_MEM=$LXC_MEM_MIN
 fi
+
+if [ $LXC_AUTOTAG -gt 0 ]; then
+  TAGS="--tags ${LXC_TAGS},${SERVICE_TAGS}"
+fi
+
+# Check is the newest template available, else download it.
+pveam update
+TMPL_NAME=$(pveam available --section system | grep $LXC_TEMPLATE_VERSION | tail -1 | cut -d' ' -f11)
+pveam download $LXC_TEMPLATE_STORAGE $TMPL_NAME
 
 if [ $ctid -gt 99 ]; then
   LXC_CHK=$ctid
@@ -130,8 +130,20 @@ else
 fi
 echo "Will now create LXC Container $LXC_NBR!";
 
+if [ $LXC_THREADS -gt 0 ]; then
+  LXC_CORES=--cores\ $LXC_THREADS
+fi
+
+
+if [[ $LXC_RESSOURCE_POOL != "" ]]; then
+  LXC_POOL=--pool\ $LXC_RESSOURCE_POOL
+fi
+
+
 # Create the container
-pct create $LXC_NBR --password $LXC_PWD -unprivileged $LXC_UNPRIVILEGED $LXC_TEMPLATE_STORAGE:vztmpl/$TMPL_NAME -rootfs $LXC_ROOTFS_STORAGE:$LXC_ROOTFS_SIZE;
+set +u
+pct create $LXC_NBR $TAGS $LXC_CORES $LXC_POOL --password $LXC_PWD -unprivileged $LXC_UNPRIVILEGED $LXC_TEMPLATE_STORAGE:vztmpl/$TMPL_NAME -rootfs $LXC_ROOTFS_STORAGE:$LXC_ROOTFS_SIZE;
+set -u
 sleep 2;
 
 # Check vlan configuration
@@ -146,7 +158,7 @@ fi
 sleep 2
 
 if [ $LXC_MP -gt 0 ]; then
-  pct set $LXC_NBR -mp0 $LXC_SHAREFS_STORAGE:$LXC_SHAREFS_SIZE,mp=/$LXC_SHAREFS_MOUNTPOINT
+  pct set $LXC_NBR -mp0 $LXC_SHAREFS_STORAGE:$LXC_SHAREFS_SIZE,backup=1,mp=/$LXC_SHAREFS_MOUNTPOINT
 fi
 sleep 2;
 
@@ -155,9 +167,11 @@ PS3="Select the Server-Function: "
 pct start $LXC_NBR;
 sleep 5;
 # Set the root ssh key
-pct exec $LXC_NBR -- mkdir /root/.ssh
+pct exec $LXC_NBR -- mkdir -p /root/.ssh
 pct push $LXC_NBR $LXC_AUTHORIZED_KEY /root/.ssh/authorized_keys
 pct push $LXC_NBR "$config" /root/zamba.conf
+pct exec $LXC_NBR -- sed -i "s,\${service},${service}," /root/zamba.conf
+pct exec $LXC_NBR -- echo "LXC_NBR=$LXC_NBR" /root/zamba.conf
 pct push $LXC_NBR "$PWD/src/functions.sh" /root/functions.sh
 pct push $LXC_NBR "$PWD/src/constants.conf" /root/constants.conf
 pct push $LXC_NBR "$PWD/src/lxc-base.sh" /root/lxc-base.sh
@@ -171,9 +185,15 @@ pct exec $LXC_NBR -- su - root -c "bash $dbg /root/lxc-base.sh"
 echo "Install '$service'!"
 pct exec $LXC_NBR -- su - root -c "bash $dbg /root/install-service.sh"
 
+pct shutdown $LXC_NBR
 if [[ $service == "zmb-ad" ]]; then
-  pct stop $LXC_NBR
   ## set nameserver, ${LXC_IP%/*} extracts the ip address from cidr format
   pct set $LXC_NBR -nameserver ${LXC_IP%/*}
-  pct start $LXC_NBR
+elif [[ $service == "zmb-ad-join" ]]; then
+  pct set $LXC_NBR -nameserver "${LXC_IP%/*} $LXC_DNS"
+fi
+pct start $LXC_NBR
+if [[ $service == "zmb-ad" ]] || [[ $service == "zmb-ad-join" ]]; then
+  sleep 5
+  pct exec $LXC_NBR /usr/local/bin/smb-backup 7
 fi

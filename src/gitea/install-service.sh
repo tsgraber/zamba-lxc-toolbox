@@ -9,15 +9,15 @@ source /root/functions.sh
 source /root/zamba.conf
 source /root/constants-service.conf
 
-wget -q -O - https://nginx.org/keys/nginx_signing.key | apt-key add -
-echo "deb http://nginx.org/packages/debian $(lsb_release -cs) nginx" | tee /etc/apt/sources.list.d/nginx.list
+wget -q -O - https://nginx.org/keys/nginx_signing.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/nginx.key >/dev/null
+echo "deb [signed-by=/etc/apt/trusted.gpg.d/nginx.key] http://nginx.org/packages/debian $(lsb_release -cs) nginx" | tee /etc/apt/sources.list.d/nginx.list
 
-wget -q -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
-echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | tee /etc/apt/sources.list.d/pgdg.list
+wget -q -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc  | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/postgresql.key >/dev/null
+echo "deb [signed-by=/etc/apt/trusted.gpg.d/postgresql.key] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | tee /etc/apt/sources.list.d/pgdg.list
 
 apt update
 
-DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install -y -qq postgresql nginx git ssl-cert unzip zip
+DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install --no-install-recommends -y -qq postgresql nginx git ssl-cert unzip zip
 
 systemctl enable --now postgresql
 
@@ -35,6 +35,32 @@ mkdir -p /etc/gitea
 mkdir -p /${LXC_SHAREFS_MOUNTPOINT}/
 chown -R git:git /${LXC_SHAREFS_MOUNTPOINT}/
 chmod -R 750 /${LXC_SHAREFS_MOUNTPOINT}/
+
+cat << EOF > /usr/local/bin/update-gitea
+PATH="/bin:/usr/bin:/usr/local/bin"
+echo "Checking github for new gitea version"
+current_version=\$(curl -s https://api.github.com/repos/go-gitea/gitea/releases/latest | grep "tag_name" | cut -d '"' -f4)
+installed_version=\$(echo v\$(gitea --version | cut -d ' ' -f3))
+echo "Installed gitea version is \$installed_version"
+if [ \$installed_version != \$current_version ]; then
+  echo "New gitea version \$current_version available. Stopping gitea.service"
+  systemctl stop gitea.service
+  echo "Downloading gitea version \$current_version..."
+  curl -s https://api.github.com/repos/go-gitea/gitea/releases/latest | grep browser_download_url | cut -d '"' -f 4 | grep '\linux-amd64$' | wget -q -O /usr/local/bin/gitea -i -
+  chmod +x /usr/local/bin/gitea
+  echo "Starting gitea.service..."
+  systemctl start gitea.service
+  echo "gitea update finished!"
+else
+  echo "gitea version is up-to-date!"
+fi
+EOF
+chmod +x /usr/local/bin/update-gitea
+
+cat << EOF > /etc/apt/apt.conf.d/80-gitea-apt-hook
+DPkg::Post-Invoke {"/usr/local/bin/update-gitea";};
+EOF
+chmod +x /etc/apt/apt.conf.d/80-gitea-apt-hook
 
 cat << EOF > /etc/systemd/system/gitea.service
 [Unit]
@@ -94,6 +120,10 @@ chown -R root:git /etc/gitea
 chmod 770 /etc/gitea
 chmod 770 /etc/gitea/app.ini
 
+if [ -f /etc/nginx/sites-enabled/default ]; then
+  unlink /etc/nginx/sites-enabled/default
+fi
+
 cat << EOF > /etc/nginx/conf.d/default.conf
 server {
     listen 80;
@@ -151,7 +181,7 @@ server {
 }
 
 EOF
-openssl dhparam -out /etc/nginx/dhparam.pem 4096
+generate_dhparam
 
 systemctl daemon-reload
 systemctl enable --now gitea

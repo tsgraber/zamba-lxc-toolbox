@@ -6,6 +6,9 @@
 # (C) 2021 Script rework and documentation by Thorsten Spille <thorsten@spille-edv.de>
 
 source /root/functions.sh
+
+NEXTCLOUD_ADMIN_PWD=$(random_password)
+
 source /root/zamba.conf
 source /root/constants-service.conf
 
@@ -22,7 +25,7 @@ echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" 
 
 apt update
 
-DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install -y -qq --no-install-recommends sudo tree locate screen zip ffmpeg ghostscript libfile-fcntllock-perl libfuse2 socat fail2ban ldap-utils cifs-utils redis-server imagemagick libmagickcore-6.q16-6-extra \
+DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt install -y -qq --no-install-recommends tree locate screen zip ffmpeg ghostscript libfile-fcntllock-perl libfuse2 socat fail2ban ldap-utils cifs-utils redis-server imagemagick libmagickcore-6.q16-6-extra \
 postgresql-13 nginx php$NEXTCLOUD_PHP_VERSION-{fpm,gd,mysql,pgsql,curl,xml,zip,intl,mbstring,bz2,ldap,apcu,bcmath,gmp,imagick,igbinary,redis,dev,smbclient,cli,common,opcache,readline}
 
 timedatectl set-timezone $LXC_TIMEZONE
@@ -87,7 +90,7 @@ sed -i "s/rights=\"none\" pattern=\"XPS\"/rights=\"read|write\" pattern=\"XPS\"/
 
 mkdir -p /etc/nginx/ssl
 openssl req -x509 -nodes -days 3650 -newkey rsa:4096 -keyout /etc/ssl/private/nextcloud.key -out /etc/ssl/certs/nextcloud.crt -subj "/CN=$NEXTCLOUD_FQDN" -addext "subjectAltName=DNS:$NEXTCLOUD_FQDN"
-openssl dhparam -dsaparam -out /etc/ssl/certs/dhparam.pem 4096
+generate_dhparam
 
 mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
 
@@ -157,7 +160,7 @@ ssl_trusted_certificate /etc/ssl/certs/nextcloud.crt;
 #ssl_certificate /etc/letsencrypt/ecc-certs/fullchain.pem;
 #ssl_certificate_key /etc/letsencrypt/ecc-certs/privkey.pem;
 #ssl_trusted_certificate /etc/letsencrypt/ecc-certs/chain.pem;
-ssl_dhparam /etc/ssl/certs/dhparam.pem;
+ssl_dhparam /etc/nginx/dhparam.pem;
 ssl_session_timeout 1d;
 ssl_session_cache shared:SSL:50m;
 ssl_session_tickets off;
@@ -182,7 +185,7 @@ add_header X-Content-Type-Options               "nosniff"       always;
 add_header X-Download-Options                   "noopen"        always;
 add_header X-Frame-Options                      "SAMEORIGIN"    always;
 add_header X-Permitted-Cross-Domain-Policies    "none"          always;
-add_header X-Robots-Tag                         "none"          always;
+add_header X-Robots-Tag                         "noindex, nofollow"          always;
 add_header X-XSS-Protection                     "1; mode=block" always;
 fastcgi_hide_header X-Powered-By;
 fastcgi_read_timeout 3600;
@@ -399,7 +402,9 @@ array (
 'updater.release.channel' => 'stable',
 'trusted_proxies' => 
 array (
-'$NEXTCLOUD_REVPROX'
+'$NEXTCLOUD_REVPROX',
+'127.0.0.1',
+'::1',
 ),
 );
 EOF

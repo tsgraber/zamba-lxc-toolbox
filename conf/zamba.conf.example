@@ -27,11 +27,14 @@ LXC_SHAREFS_STORAGE="local-zfs"
 # Defines the mountpoint of the filesystem shared by Zamba inside your LXC container (default: tank)
 LXC_SHAREFS_MOUNTPOINT="tank"
 
+# cpu core count (default: 0 = unlimited)
+LXC_THREADS=0
+
 # Defines the amount of RAM in MB your LXC container is allowed to use (default: 1024)
-LXC_MEM="1024"
+LXC_MEM=1024
 
 # Defines the amount of swap space in MB your LXC container is allowed to use (default: 1024)
-LXC_SWAP="1024"
+LXC_SWAP=1024
 
 # Defines the hostname of your LXC container
 LXC_HOSTNAME="${service}"
@@ -81,6 +84,18 @@ LXC_LOCALE="de_DE.UTF-8"
 # Set dark background for vim syntax highlighting (0 or 1)
 LXC_VIM_BG_DARK=1
 
+# Default random password length
+LXC_RANDOMPWD=32
+
+# Move lxc to specific ressource pool
+LXC_RESSOURCE_POOL=""
+
+# Automatically add meta tags to lxc container
+LXC_AUTOTAG=1
+
+# Add meta tags to linux container
+LXC_TAGS="linux,debian,${service}"
+
 ############### Zamba-Server-Section ###############
 
 # Defines the REALM for the Active Directory (AD DC, AD member)
@@ -116,7 +131,7 @@ MATRIX_ELEMENT_FQDN="element.zmb.rocks"
 MATRIX_ADMIN_USER="admin"
 
 # Define the admin password
-MATRIX_ADMIN_PASSWORD="Start!123"
+MATRIX_ADMIN_PASSWORD='Start!123'
 
 ############### Nextcloud-Section ###############
 
@@ -127,7 +142,7 @@ NEXTCLOUD_FQDN="nextcloud.zmb.rocks"
 NEXTCLOUD_ADMIN_USR="zmb-admin"
 
 # Build a strong password for this user. Username and password will shown at the end of the installation. 
-NEXTCLOUD_ADMIN_PWD="$(random_password)"
+# NEXTCLOUD_ADMIN_PWD='very_secure_password'
 
 # Defines the data directory, which will be createt under LXC_SHAREFS_MOUNTPOINT
 NEXTCLOUD_DATA="nc_data"
@@ -160,9 +175,38 @@ KOPANO_MAILGW="192.168.100.254"
 # https://kopano.com/downloads-demo/?demo=Kopano+Groupware&headline=Packages&target=Debian+10
 KOPANO_REPKEY="1234567890abcdefghijklmno"
 
-############### Tactical-RMM Section ###############
+############### vaultwarden Section ###############
 
-rmmdomain=api.${LXC_DOMAIN}
-frontenddomain=${LXC_HOSTNAME}.${LXC_DOMAIN}
-meshdomain=mesh.${LXC_DOMAIN}
-adminemail=rmm@${LXC_DOMAIN}
+# Enable/disable signups (true/false)
+VW_SIGNUPS_ALLOWED=false
+
+# Hostname of your mailserver
+VW_SMTP_HOST=mail.bashclub.org
+
+# email address to send from
+VW_SMTP_FROM="vaultwarden@bashclub.org"
+
+# display name to send from
+VW_SMTP_FROM_NAME="Vaultwarden Password Manager"
+
+# port of your mailserver
+VW_SMTP_PORT=587
+
+# use ssl?
+VW_SMTP_SSL=true
+
+# use starttls?
+VW_SMTP_EXPLICIT_TLS=false
+
+# username of your mailbox
+VW_SMTP_USERNAME=vaultwarden@bashclub.org
+
+# password of your mailbox
+VW_SMTP_PASSWORD='<yourEmailPassword>'
+
+############### ansible-semaphore Section ###############
+
+SEMAPHORE_ADMIN=admin
+SEMAPHORE_ADMIN_DISPLAY_NAME="Semaphore Administrator"
+SEMAPHORE_ADMIN_EMAIL="admin@zmb.rocks"
+SEMAPHORE_ADMIN_PASSWORD='Start123'
